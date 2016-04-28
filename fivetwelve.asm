@@ -1,12 +1,14 @@
 bits 16                             ; tip: use -mi8086 for objdump disassembly
-global _start                       ; we use a linker script for debug ELFs
+
+section .text                       ; we use a linker script for debug ELFs
+global _start
 
 _start:
     xor ax, ax                      ; clear AX
 
     ; set stack to 0000:9c00
     mov ss, ax                      ; stack segment
-    mov sp, 0x9c00                  ; stack pointer
+    mov sp, 0x9c00                  ; stack pointer - TODO why this value?
 
     ; use data segment 0x0000
     mov ds, ax                      ; set to zero
@@ -31,34 +33,96 @@ _start:
     mov ch, 0x10                    ; cursor invisible if bits 6-5 = 01
     int 0x10
 
-    mov ax, 0x0a18                  ; upwards green ant
-    mov di, 0x1000
+    ;mov ax, 0x0a18                  ; upwards green ant
+    ;mov di, 0x1000
+    ;stosw
+
+init_screen:         
+    mov cx, 80 * 50
+    mov ax, 0x0400                  ; fill screen with red fg, black bg
+    xor di, di
+    rep stosw
+
+init_ants:
+    mov cx, [ants.len]
+    mov bx, ants
+.iterate:
+    call random
+    xor dx, dx
+    div word [init_ants.max]        ; shorter than immediate in register
+    mov [bx], dx
+    add bx, 2
+    loop .iterate
+
+clear_screen:
+    mov cx, 80 * 50
+    mov di, 0
+    mov si, 0
+.iterate:
+    es lodsw
+    mov al, 0                      ; clear character
+    stosw
+    loop .iterate
+
+draw_ants:
+    mov cx, [ants.len]
+    mov bx, ants
+.iterate:
+    mov ax, [bx]
+    mov di, ax
+    shr di, 2
+    shl di, 1                       ; di = flat position, times 2
+
+    and ax, 0x3                     ; ax = state
+
+    ; update orientation
+    mov ah, [es:di + 1]             ; copy color from screen
+
+    ; update position
+    
+
+    ; flip color and store it on old position
+
+    xor ah, 0xA0                    ; flip color
+    add al, 0x18                    ; new state to character
     stosw
 
-.init:
-    mov cx, 4000                   ; loop over all 80x50 pixels
-.next:
 
-    mov si, cx
-    add si, si                      ; we want [es:2*si]
-    lodsw                           ; pixel is now in AX
 
-    jz .update                      ; skip nonpixels
+    add bx, 2                       ; next ant
+    loop .iterate
+
+    jmp halt
 
 
 
-.update:
-    loop .next
+random:                             ; stores the result in ax
+    push dx
+    xor dx, dx
+    mov word ax, 17364
+    mul word [random.seed]
+    div word [random.modulus]
+    mov [random.seed], dx
+    mov ax, dx
+    pop dx
+    ret
 
-    ; end of loop
-    mov bx, [0x046c]                 ; number of IRQ0 timer ticks since boot
-    add bx, 10
-
-.delay:
-    cmp [0x046c], bx
-    jne .delay
-
-    jmp .init
 
 halt:
+    cli
     hlt                             ; halt
+
+section .bss
+ants.max equ 128
+ants:
+    resw ants.max           ; position << 2 | state
+
+section .data
+ants.len:
+    dw 8
+init_ants.max:
+    dw ((80 * 50) << 2) | 0x3
+random.seed: 
+    dw 23
+random.modulus:
+    dw 65521

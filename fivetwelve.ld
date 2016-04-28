@@ -16,4 +16,7 @@ SECTIONS
     {
         SHORT(0xaa55);
     }
+    .bss : {
+        *(.bss)
+    }
 }
